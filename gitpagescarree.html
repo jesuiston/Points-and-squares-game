@@ -1,0 +1,442 @@
+﻿<!DOCTYPE html>
+<html lang="fr">
+<head>
+<link rel="icon" type="image/png"
+href="Gh.png">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Points et Carrés</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      width: 100%;
+      font-family: Arial, sans-serif;
+      box-sizing: border-box;
+      text-align: center;
+    }
+
+
+    #menu, #scoreBoard, #turnIndicator {
+      margin: 10px;
+    }
+
+
+    canvas {
+      width: 100%;
+      height: auto;
+      touch-action: none;
+      display: block;
+      margin: auto;
+      border: 1px solid #ccc;
+    }
+
+
+    select, button, input {
+      font-size: 16px;
+      margin: 10px;
+    }
+
+
+    #scoreBoard, #turnIndicator {
+      font-size: 18px;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <h1>Points et Carrés</h1>
+  <div id="menu">
+    <label>Grille :
+      <select id="gridSize">
+        <option value="5">5x5</option>
+        <option value="10">10x10</option>
+        <option value="20">20x20</option>
+      </select>
+    </label>
+    <br />
+    <label>Mode de jeu :
+      <select id="gameMode">
+        <option value="2p">2 joueurs</option>
+        <option value="ai">Contre l'IA</option>
+      </select>
+    </label>
+    <br />
+    <label>Difficulté :
+      <select id="difficulty">
+        <option value="easy">Facile</option>
+        <option value="medium" selected>Moyen</option>
+        <option value="hard">Difficile</option>
+      </select>
+    </label>
+    <br />
+    <input type="text" id="player1Name" placeholder="Nom joueur 1" value="Joueur 1" />
+    <input type="color" id="color1" value="#0077ff">
+    <select onchange="document.getElementById('color1').value = this.value">
+      <option value="#0077ff">Bleu</option>
+      <option value="#e60000">Rouge</option>
+      <option value="#008000">Vert</option>
+      <option value="#800080">Violet</option>
+      <option value="#ffa500">Orange</option>
+    </select>
+    <br />
+    <input type="text" id="player2Name" placeholder="Nom joueur 2 / IA" value="Joueur 2" />
+    <input type="color" id="color2" value="#e60000">
+    <select onchange="document.getElementById('color2').value = this.value">
+      <option value="#0077ff">Bleu</option>
+      <option value="#e60000">Rouge</option>
+      <option value="#008000">Vert</option>
+      <option value="#800080">Violet</option>
+      <option value="#ffa500">Orange</option>
+    </select>
+    <br />
+    <button onclick="startGame()">Commencer</button>
+  </div>
+
+
+  <div id="scoreBoard" style="display: none;"></div>
+  <div id="turnIndicator" style="display: none;">Tour de : Joueur 1</div>
+  <canvas id="gameCanvas" style="display: none;"></canvas>
+  <button onclick="resetGame()" style="display: none;" id="resetBtn">Recommencer</button>
+
+
+  <script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    let gridSize, cellSize, dots;
+    let hLines, vLines, boxes;
+    let currentPlayer = 1;
+    let gameMode, difficulty;
+    let score = [0, 0];
+    let playerNames = ["Joueur 1", "Joueur 2"];
+    let playerColors = ["#0077ff", "#e60000"];
+    function resizeCanvas() {
+      canvas.width = Math.min(window.innerWidth, window.innerHeight) * 0.95;
+      canvas.height = canvas.width;
+    }
+
+
+    function updateTurnIndicator() {
+      document.getElementById('turnIndicator').textContent = `Tour de : ${playerNames[currentPlayer - 1]}`;
+      document.getElementById('turnIndicator').style.color = playerColors[currentPlayer - 1];
+    }
+
+
+    function startGame() {
+      gridSize = parseInt(document.getElementById('gridSize').value);
+      gameMode = document.getElementById('gameMode').value;
+      difficulty = document.getElementById('difficulty').value;
+      playerColors = [document.getElementById('color1').value, document.getElementById('color2').value];
+      dots = gridSize;
+      resizeCanvas();
+      cellSize = canvas.width / (gridSize - 1);
+      hLines = Array.from({ length: dots }, () => Array(dots - 1).fill(false));
+      vLines = Array.from({ length: dots - 1 }, () => Array(dots).fill(false));
+      boxes = Array.from({ length: dots - 1 }, () => Array(dots - 1).fill(0));
+      score = [0, 0];
+      currentPlayer = 1;
+      playerNames[0] = document.getElementById('player1Name').value || "Joueur 1";
+      playerNames[1] = document.getElementById('player2Name').value || "Joueur 2";
+
+
+      document.getElementById('menu').style.display = 'none';
+      canvas.style.display = 'block';
+      document.getElementById('scoreBoard').style.display = 'block';
+      document.getElementById('resetBtn').style.display = 'inline-block';
+      document.getElementById('turnIndicator').style.display = 'block';
+      updateScore();
+      updateTurnIndicator();
+      drawBoard();
+    }
+
+
+    window.addEventListener('resize', () => {
+      if (canvas.style.display !== 'none') {
+        resizeCanvas();
+        cellSize = canvas.width / (gridSize - 1);
+        drawBoard();
+      }
+    });
+
+
+    function drawStaticLine(x1, y1, x2, y2) {
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.strokeStyle = '#ddd';
+      ctx.lineWidth = Math.max(2, cellSize * 0.08);
+      ctx.stroke();
+    }
+
+
+    function animateLine(x1, y1, x2, y2, player) {
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.strokeStyle = playerColors[player - 1];
+      ctx.lineWidth = Math.max(2, cellSize * 0.08);
+      ctx.stroke();
+    }
+
+
+    function animateBox(x, y, player) {
+      const color = playerColors[player - 1];
+      let opacity = 0;
+      const step = 0.05;
+      function fade() {
+        opacity += step;
+        ctx.fillStyle = color.replace('#', 'rgba(')
+          .replace(/(..)(..)(..)/, (_, r, g, b) =>
+            parseInt(r, 16) + ',' + parseInt(g, 16) + ',' + parseInt(b, 16) + ',' + opacity.toFixed(2)
+          );
+        ctx.fillRect(x * cellSize + 1, y * cellSize + 1, cellSize - 2, cellSize - 2);
+        if (opacity < 0.4) requestAnimationFrame(fade);
+      }
+      fade();
+    }
+
+
+    function updateScore() {
+      const board = document.getElementById('scoreBoard');
+      board.textContent = `${playerNames[0]} : ${score[0]} | ${playerNames[1]} : ${score[1]}`;
+    }
+
+
+    function resetGame() {
+      document.getElementById('menu').style.display = 'block';
+      canvas.style.display = 'none';
+      document.getElementById('scoreBoard').style.display = 'none';
+      document.getElementById('resetBtn').style.display = 'none';
+      document.getElementById('turnIndicator').style.display = 'none';
+    }
+
+
+    function nextTurn() {
+      currentPlayer = 3 - currentPlayer;
+      updateTurnIndicator();
+    }
+    function drawBoard() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      for (let y = 0; y < dots; y++) {
+        for (let x = 0; x < dots; x++) {
+          if (x < dots - 1) {
+            if (hLines[y][x]) {
+              animateLine(x * cellSize, y * cellSize, (x + 1) * cellSize, y * cellSize, hLines[y][x]);
+            } else {
+              drawStaticLine(x * cellSize, y * cellSize, (x + 1) * cellSize, y * cellSize);
+            }
+          }
+          if (y < dots - 1) {
+            if (vLines[y][x]) {
+              animateLine(x * cellSize, y * cellSize, x * cellSize, (y + 1) * cellSize, vLines[y][x]);
+            } else {
+              drawStaticLine(x * cellSize, y * cellSize, x * cellSize, (y + 1) * cellSize);
+            }
+          }
+        }
+      }
+
+
+      for (let y = 0; y < dots - 1; y++) {
+        for (let x = 0; x < dots - 1; x++) {
+          if (boxes[y][x]) {
+            ctx.fillStyle = playerColors[boxes[y][x] - 1] + '66';
+            ctx.fillRect(x * cellSize + 1, y * cellSize + 1, cellSize - 2, cellSize - 2);
+          }
+        }
+      }
+
+
+      for (let y = 0; y < dots; y++) {
+        for (let x = 0; x < dots; x++) {
+          ctx.beginPath();
+          ctx.arc(x * cellSize, y * cellSize, Math.max(2, cellSize * 0.08), 0, Math.PI * 2);
+          ctx.fillStyle = '#333';
+          ctx.fill();
+        }
+      }
+    }
+
+
+    canvas.addEventListener('click', e => {
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      const gx = Math.floor(x / cellSize);
+      const gy = Math.floor(y / cellSize);
+      const dx = x % cellSize;
+      const dy = y % cellSize;
+
+
+      if (dy < 15 && gx < dots - 1 && gy < dots && !hLines[gy][gx]) {
+        hLines[gy][gx] = currentPlayer;
+        if (!checkBoxes()) nextTurn();
+        drawBoard();
+        if (gameMode === 'ai' && currentPlayer === 2) setTimeout(aiMove, 300);
+      } else if (dx < 15 && gx < dots && gy < dots - 1 && !vLines[gy][gx]) {
+        vLines[gy][gx] = currentPlayer;
+        if (!checkBoxes()) nextTurn();
+        drawBoard();
+        if (gameMode === 'ai' && currentPlayer === 2) setTimeout(aiMove, 300);
+      }
+    });
+
+
+    function checkBoxes() {
+      let scored = false;
+      for (let y = 0; y < dots - 1; y++) {
+        for (let x = 0; x < dots - 1; x++) {
+          if (!boxes[y][x] && hLines[y][x] && hLines[y + 1][x] && vLines[y][x] && vLines[y][x + 1]) {
+            boxes[y][x] = currentPlayer;
+            score[currentPlayer - 1]++;
+            animateBox(x, y, currentPlayer);
+            scored = true;
+          }
+        }
+      }
+      updateScore();
+      checkEndGame();
+      return scored;
+    }
+
+
+    function checkEndGame() {
+      const total = (dots - 1) * (dots - 1);
+      if (score[0] + score[1] === total) {
+        const winner = score[0] > score[1] ? 1 : score[1] > score[0] ? 2 : 0;
+        const color = playerColors[winner - 1] || 'gray';
+        let blink = 0;
+        const flash = setInterval(() => {
+          document.body.style.backgroundColor = (blink % 2 === 0) ? color : 'white';
+          blink++;
+          if (blink > 5) {
+            clearInterval(flash);
+            document.body.style.backgroundColor = 'white';
+            alert(winner === 0 ? 'Égalité !' : `${playerNames[winner - 1]} a gagné !`);
+          }
+        }, 400);
+      }
+    }
+
+
+    function getAllMoves() {
+      const moves = [];
+      for (let y = 0; y < dots; y++)
+        for (let x = 0; x < dots - 1; x++)
+          if (!hLines[y][x]) moves.push({ type: 'h', x, y });
+      for (let y = 0; y < dots - 1; y++)
+        for (let x = 0; x < dots; x++)
+          if (!vLines[y][x]) moves.push({ type: 'v', x, y });
+      return moves;
+    }
+
+
+    function simulateMove(move) {
+      const hCopy = hLines.map(r => [...r]);
+      const vCopy = vLines.map(r => [...r]);
+      const bCopy = boxes.map(r => [...r]);
+      let gained = 0;
+      const stack = [move];
+      while (stack.length) {
+        const m = stack.pop();
+        if (m.type === 'h') hCopy[m.y][m.x] = true;
+        else vCopy[m.y][m.x] = true;
+        for (let y = 0; y < dots - 1; y++) {
+          for (let x = 0; x < dots - 1; x++) {
+            if (!bCopy[y][x] && hCopy[y][x] && hCopy[y + 1][x] && vCopy[y][x] && vCopy[y][x + 1]) {
+              bCopy[y][x] = 2;
+              gained++;
+              stack.push(...getMissingEdges(hCopy, vCopy, x, y));
+            }
+          }
+        }
+      }
+      return { score: gained };
+    }
+
+
+    function getMissingEdges(h, v, x, y) {
+      const list = [];
+      if (!h[y][x]) list.push({ type: 'h', x, y });
+      if (!h[y + 1][x]) list.push({ type: 'h', x, y: y + 1 });
+      if (!v[y][x]) list.push({ type: 'v', x, y });
+      if (!v[y][x + 1]) list.push({ type: 'v', x: x + 1, y });
+      return list;
+    }
+
+
+    function aiPlay(type, x, y) {
+      if (type === 'h') hLines[y][x] = 2;
+      else vLines[y][x] = 2;
+      if (!checkBoxes()) nextTurn();
+      drawBoard();
+      if (gameMode === 'ai' && currentPlayer === 2) setTimeout(aiMove, 300);
+    }
+
+
+    function isSafeMove(type, x, y) {
+      let risk = 0;
+      if (type === 'h') {
+        if (y > 0 && !boxes[y - 1][x]) {
+          const s = [hLines[y - 1][x], hLines[y][x], vLines[y - 1][x], vLines[y - 1][x + 1]];
+          if (s.filter(Boolean).length === 2) risk++;
+        }
+        if (y < dots - 1 && !boxes[y][x]) {
+          const s = [hLines[y][x], hLines[y + 1][x], vLines[y][x], vLines[y][x + 1]];
+          if (s.filter(Boolean).length === 2) risk++;
+        }
+      } else {
+        if (x > 0 && !boxes[y][x - 1]) {
+          const s = [hLines[y][x - 1], hLines[y + 1][x - 1], vLines[y][x - 1], vLines[y][x]];
+          if (s.filter(Boolean).length === 2) risk++;
+        }
+        if (x < dots - 1 && !boxes[y][x]) {
+          const s = [hLines[y][x], hLines[y + 1][x], vLines[y][x], vLines[y][x + 1]];
+          if (s.filter(Boolean).length === 2) risk++;
+        }
+      }
+      return risk === 0;
+    }
+
+
+    function aiMove() {
+      if (difficulty === 'easy') {
+        const moves = getAllMoves();
+        aiPlay(...Object.values(moves[Math.floor(Math.random() * moves.length)]));
+        return;
+      }
+
+
+      if (difficulty === 'medium') {
+        for (let y = 0; y < dots - 1; y++) {
+          for (let x = 0; x < dots - 1; x++) {
+            const sides = [hLines[y][x], hLines[y + 1][x], vLines[y][x], vLines[y][x + 1]];
+            if (!boxes[y][x] && sides.filter(Boolean).length === 3) {
+              if (!hLines[y][x]) return aiPlay('h', x, y);
+              if (!hLines[y + 1][x]) return aiPlay('h', x, y + 1);
+              if (!vLines[y][x]) return aiPlay('v', x, y);
+              if (!vLines[y][x + 1]) return aiPlay('v', x + 1, y);
+            }
+          }
+        }
+        const safe = getAllMoves().filter(m => isSafeMove(m.type, m.x, m.y));
+        aiPlay(...Object.values(safe.length ? safe[Math.floor(Math.random() * safe.length)] : getAllMoves()[0]));
+        return;
+      }
+
+
+      const moves = getAllMoves();
+      let best = moves[0], bestScore = -1;
+      for (const move of moves) {
+        const res = simulateMove(move);
+        if (res.score > bestScore) {
+          best = move;
+          bestScore = res.score;
+        }
+      }
+      aiPlay(...Object.values(best));
+    }
+  </script>
+</body>
+</html>
